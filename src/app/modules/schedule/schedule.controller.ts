@@ -30,6 +30,32 @@ const createSchedule = catchAsync(async (req: Request, res: Response) => {
   });
 });
 
+const updateSchedule = catchAsync(async (req: Request, res: Response) => {
+  const hostId = (req as any).user.userId;
+  const result = await ScheduleService.updateSchedule(
+    hostId,
+    req.params.id,
+    req.body,
+  );
+  sendResponse(res, {
+    statusCode: 200,
+    success: true,
+    message: "Schedule updated successfully",
+    data: result,
+  });
+});
+
+const deleteSchedule = catchAsync(async (req: Request, res: Response) => {
+  const hostId = (req as any).user.userId;
+  const result = await ScheduleService.deleteSchedule(hostId, req.params.id);
+  sendResponse(res, {
+    statusCode: 200,
+    success: true,
+    message: "Schedule deleted successfully",
+    data: result,
+  });
+});
+
 const getHostSchedules = catchAsync(async (req: Request, res: Response) => {
   const hostId = (req as any).user.userId;
   const result = await ScheduleService.getHostSchedules(hostId, req.query as any);
@@ -127,6 +153,8 @@ const getScheduleById = catchAsync(async (req: Request, res: Response) => {
 
 export const ScheduleController = {
   createSchedule,
+  updateSchedule,
+  deleteSchedule,
   getHostSchedules,
   completeTask,
   respondToSchedule,

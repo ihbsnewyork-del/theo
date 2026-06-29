@@ -4,6 +4,20 @@ import { IAccommodation } from "./accommodation.interface";
 import AppError from "../../error/appError";
 import { User } from "../user/user.model";
 import { CleanerAssignment } from "../assignment/assignment.model";
+import { Payment } from "../payment/payment.model";
+import { CleaningSchedule } from "../schedule/schedule.model";
+
+// Derive the cleaner's response to the latest schedule (what the host sees):
+//   pending  → schedule sent, cleaner hasn't responded yet
+//   refused  → cleaner refused
+//   accepted → cleaner accepted (and any state after acceptance)
+const cleanerResponseOf = (
+  status: string,
+): "pending" | "accepted" | "refused" => {
+  if (status === "scheduled") return "pending";
+  if (status === "refused") return "refused";
+  return "accepted";
+};
 
 // ─── Create ───────────────────────────────────────────────────────────────────
 
@@ -103,12 +117,55 @@ const getMyAccommodations = async (
     });
   }
 
+  // latest payment per accommodation on this page
+  const payments = await Payment.find({ accommodation: { $in: pageIds } })
+    .sort({ createdAt: -1 })
+    .select("accommodation status amount currency createdAt");
+
+  const paymentByAccommodation = new Map<string, any>();
+  for (const payment of payments) {
+    const key = String(payment.accommodation);
+    if (!paymentByAccommodation.has(key)) {
+      paymentByAccommodation.set(key, {
+        status: payment.status,
+        amount: payment.amount,
+        currency: payment.currency,
+        createdAt: payment.createdAt,
+      });
+    }
+  }
+
+  // latest schedule per accommodation on this page (for the cleaner's response)
+  const schedules = await CleaningSchedule.find({
+    accommodation: { $in: pageIds },
+  })
+    .sort({ createdAt: -1 })
+    .select("accommodation status date createdAt");
+
+  const scheduleByAccommodation = new Map<string, any>();
+  for (const schedule of schedules) {
+    const key = String(schedule.accommodation);
+    if (!scheduleByAccommodation.has(key)) {
+      scheduleByAccommodation.set(key, schedule);
+    }
+  }
+
   // annotate each item with isCleanerAssigned + the assigned cleaners for the UI
-  const data = rows.map((a) => ({
-    ...a.toObject(),
-    isCleanerAssigned: assignedIds.includes(String(a._id)),
-    assignedCleaners: cleanersByAccommodation.get(String(a._id)) ?? [],
-  }));
+  const data = rows.map((a) => {
+    const latestSchedule = scheduleByAccommodation.get(String(a._id));
+    return {
+      ...a.toObject(),
+      isCleanerAssigned: assignedIds.includes(String(a._id)),
+      assignedCleaners: cleanersByAccommodation.get(String(a._id)) ?? [],
+      paymentStatus: paymentByAccommodation.get(String(a._id))?.status ?? null,
+      latestPayment: paymentByAccommodation.get(String(a._id)) ?? null,
+      scheduleId: latestSchedule ? String(latestSchedule._id) : null,
+      scheduleStatus: latestSchedule?.status ?? null,
+      scheduleCleanerResponse: latestSchedule
+        ? cleanerResponseOf(latestSchedule.status)
+        : null,
+    };
+  });
 
   return {
     data,
@@ -143,10 +200,36 @@ const getAccommodationById = async (hostId: string, accommodationId: string) => 
     pricePerCleaning: assignment.pricePerCleaning,
   }));
 
+  // latest payment for this accommodation
+  const latestPayment = await Payment.findOne({ accommodation: accommodationId })
+    .sort({ createdAt: -1 })
+    .select("status amount currency createdAt");
+
+  // latest schedule for this accommodation (for the cleaner's response)
+  const latestSchedule = await CleaningSchedule.findOne({
+    accommodation: accommodationId,
+  })
+    .sort({ createdAt: -1 })
+    .select("status date createdAt");
+
   return {
     ...accommodation.toObject(),
     isCleanerAssigned: assignments.some((a) => a.status === "accepted"),
     assignedCleaners,
+    paymentStatus: latestPayment?.status ?? null,
+    latestPayment: latestPayment
+      ? {
+          status: latestPayment.status,
+          amount: latestPayment.amount,
+          currency: latestPayment.currency,
+          createdAt: latestPayment.createdAt,
+        }
+      : null,
+    scheduleId: latestSchedule ? String(latestSchedule._id) : null,
+    scheduleStatus: latestSchedule?.status ?? null,
+    scheduleCleanerResponse: latestSchedule
+      ? cleanerResponseOf(latestSchedule.status)
+      : null,
   };
 };
 
