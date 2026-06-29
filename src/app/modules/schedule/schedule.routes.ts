@@ -5,6 +5,7 @@ import { upload } from "../../middleware/multer";
 import { ScheduleController } from "./schedule.controller";
 import {
   createScheduleSchema,
+  updateScheduleSchema,
   respondScheduleSchema,
 } from "./schedule.validation";
 
@@ -29,6 +30,17 @@ router.patch(
   auth("admin", "host"),
   ScheduleController.completeTask,
 );
+
+// PATCH /api/v1/schedule/:id — host edits a schedule (only before cleaner accepts)
+router.patch(
+  "/:id",
+  auth("admin", "host"),
+  validateRequest(updateScheduleSchema),
+  ScheduleController.updateSchedule,
+);
+
+// DELETE /api/v1/schedule/:id — host deletes a schedule (only before cleaner accepts)
+router.delete("/:id", auth("admin", "host"), ScheduleController.deleteSchedule);
 
 // ─── Cleaner ──────────────────────────────────────────────────────────────────
 

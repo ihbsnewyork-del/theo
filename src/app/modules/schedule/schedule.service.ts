@@ -7,6 +7,44 @@ import { NotificationService } from "../notification/notification.service";
 import { PaymentService } from "../payment/payment.service";
 import AppError from "../../error/appError";
 
+// Derive the cleaner's response to a schedule (what the host wants to see):
+//   pending  → sent, cleaner hasn't responded yet
+//   refused  → cleaner refused
+//   accepted → cleaner accepted (and any state after acceptance)
+const cleanerResponseOf = (
+  status: string,
+): "pending" | "accepted" | "refused" => {
+  if (status === "scheduled") return "pending";
+  if (status === "refused") return "refused";
+  return "accepted";
+};
+
+// Start/end of the calendar day for a given date (used for same-day checks)
+const dayRange = (date: Date) => {
+  const start = new Date(date);
+  start.setHours(0, 0, 0, 0);
+  const end = new Date(date);
+  end.setHours(23, 59, 59, 999);
+  return { start, end };
+};
+
+// Is there already an active schedule for this accommodation on this day?
+// Refused / cancelled schedules don't count — the host may re-schedule those.
+const findSameDaySchedule = async (
+  accommodationId: string,
+  date: Date,
+  excludeId?: string,
+) => {
+  const { start, end } = dayRange(date);
+  const filter: any = {
+    accommodation: accommodationId,
+    date: { $gte: start, $lte: end },
+    status: { $nin: ["refused", "cancelled"] },
+  };
+  if (excludeId) filter._id = { $ne: excludeId };
+  return CleaningSchedule.findOne(filter);
+};
+
 // ─── Host: create a schedule (Proceed to Schedule) ────────────────────────────
 const createSchedule = async (
   hostId: string,
@@ -35,6 +73,18 @@ const createSchedule = async (
     );
   }
 
+  // Block a duplicate schedule for the same accommodation on the same day
+  const existing = await findSameDaySchedule(
+    accommodationId,
+    new Date(payload.date),
+  );
+  if (existing) {
+    throw new AppError(
+      409,
+      "You already created a schedule on this date. Please edit the schedule if you want.",
+    );
+  }
+
   const schedule = await CleaningSchedule.create({
     accommodation: accommodationId,
     host: hostId,
@@ -60,6 +110,124 @@ const createSchedule = async (
   });
 
   return schedule;
+};
+
+// ─── Host: edit a schedule (only before the cleaner accepts) ──────────────────
+const updateSchedule = async (
+  hostId: string,
+  scheduleId: string,
+  payload: {
+    date?: string;
+    checkInTime?: string;
+    checkOutTime?: string;
+    notes?: string;
+  },
+) => {
+  const schedule = await CleaningSchedule.findOne({
+    _id: scheduleId,
+    host: hostId,
+  }).populate("accommodation", "name");
+  if (!schedule) throw new AppError(404, "Schedule not found");
+
+  // Once the cleaner has accepted (or the task moved on), the host can't edit.
+  if (schedule.status !== "scheduled") {
+    throw new AppError(
+      400,
+      schedule.status === "refused"
+        ? "This schedule was refused. Please create a new one."
+        : "The cleaner has already accepted this schedule, so it can no longer be edited.",
+    );
+  }
+
+  // If the date changes to a *different* day, make sure it doesn't clash with
+  // another schedule. Keeping the same day (e.g. editing only the time/notes)
+  // must not trip the duplicate guard against itself.
+  if (payload.date) {
+    const newDate = new Date(payload.date);
+    const isSameDay =
+      dayRange(schedule.date).start.getTime() ===
+      dayRange(newDate).start.getTime();
+
+    if (!isSameDay) {
+      const clash = await findSameDaySchedule(
+        String(schedule.accommodation?._id || schedule.accommodation),
+        newDate,
+        String(schedule._id),
+      );
+      if (clash) {
+        throw new AppError(
+          409,
+          "You already created a schedule on this date. Please edit the schedule if you want.",
+        );
+      }
+    }
+    schedule.date = newDate;
+  }
+
+  if (payload.checkInTime !== undefined) schedule.checkInTime = payload.checkInTime;
+  if (payload.checkOutTime !== undefined)
+    schedule.checkOutTime = payload.checkOutTime;
+  if (payload.notes !== undefined) schedule.notes = payload.notes;
+
+  await schedule.save();
+
+  const accName = (schedule.accommodation as any)?.name || "an accommodation";
+  await NotificationService.createNotification({
+    user: String(schedule.cleaner),
+    title: "Cleaning schedule updated",
+    message: `The host updated the cleaning for ${accName} — ${schedule.date.toDateString()} (${schedule.checkInTime}–${schedule.checkOutTime}).`,
+    type: "schedule_created",
+    data: { scheduleId: String(schedule._id) },
+  });
+
+  return schedule;
+};
+
+// ─── Host: delete a schedule (only before the cleaner accepts) ────────────────
+const deleteSchedule = async (hostId: string, scheduleId: string) => {
+  const schedule = await CleaningSchedule.findOne({
+    _id: scheduleId,
+    host: hostId,
+  }).populate("accommodation", "name");
+  if (!schedule) throw new AppError(404, "Schedule not found");
+
+  // Block deletion once money/work is involved.
+  if (schedule.paymentStatus !== "unpaid") {
+    throw new AppError(
+      400,
+      "This schedule has a payment attached and can no longer be deleted.",
+    );
+  }
+  if (!["scheduled", "refused", "cancelled"].includes(schedule.status)) {
+    throw new AppError(
+      400,
+      "The cleaner has already accepted this schedule, so it can no longer be deleted.",
+    );
+  }
+
+  const accommodationId = schedule.accommodation?._id || schedule.accommodation;
+  const accName = (schedule.accommodation as any)?.name || "an accommodation";
+  const wasScheduled = schedule.status === "scheduled";
+
+  await schedule.deleteOne();
+
+  // free the accommodation again
+  await Accommodation.findByIdAndUpdate(accommodationId, {
+    status: "not_scheduled",
+  });
+
+  // only notify the cleaner if they had a pending request waiting
+  if (wasScheduled) {
+    await NotificationService.createNotification({
+      user: String(schedule.cleaner),
+      title: "Cleaning schedule cancelled",
+      message: `The host cancelled the cleaning for ${accName}.`,
+      type: "schedule_created",
+      data: { scheduleId: String(schedule._id) },
+    });
+  }
+
+  return { message: "Schedule deleted successfully" };
 };
 
 // ─── Cleaner: accept / refuse a schedule ──────────────────────────────────────
@@ -134,7 +302,15 @@ const getHostSchedules = async (
     CleaningSchedule.countDocuments(filter),
   ]);
 
-  return { data, meta: { page, limit, total, totalPage: Math.ceil(total / limit) } };
+  const rows = data.map((s) => ({
+    ...s.toObject(),
+    cleanerResponse: cleanerResponseOf(s.status),
+  }));
+
+  return {
+    data: rows,
+    meta: { page, limit, total, totalPage: Math.ceil(total / limit) },
+  };
 };
 
 // ─── Cleaner: my schedules ────────────────────────────────────────────────────
@@ -177,7 +353,10 @@ const getScheduleById = async (userId: string, scheduleId: string) => {
     String(cleaner?._id || cleaner) === userId;
   if (!isParty) throw new AppError(403, "You are not part of this schedule");
 
-  return schedule;
+  return {
+    ...schedule.toObject(),
+    cleanerResponse: cleanerResponseOf(schedule.status),
+  };
 };
 
 // ─── Cleaner: submit proof of completion ──────────────────────────────────────
@@ -299,6 +478,8 @@ const completeTask = async (hostId: string, scheduleId: string) => {
 
 export const ScheduleService = {
   createSchedule,
+  updateSchedule,
+  deleteSchedule,
   respondToSchedule,
   getHostSchedules,
   getCleanerSchedules,

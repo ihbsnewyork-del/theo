@@ -34,6 +34,19 @@ const sanitize = (user: any) => {
   delete obj.otpExpiry;
   delete obj.passwordResetToken;
   delete obj.passwordResetExpiry;
+
+  // Cleaner-only: has the cleaner finished the onboarding (setup profile) screens?
+  // Required fields collected during onboarding (biography & photo are optional).
+  if (obj.role === "cleaner") {
+    obj.isOnboardingComplete = Boolean(
+      obj.siretNumber &&
+        obj.workCity &&
+        obj.serviceRadius &&
+        obj.licenseNumber &&
+        obj.availability,
+    );
+  }
+
   return obj;
 };
 
