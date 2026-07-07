@@ -332,6 +332,15 @@ const updateMyProfile = async (userId: string, payload: IUpdateProfile) => {
   if (payload.firstName !== undefined) updateData.firstName = payload.firstName;
   if (payload.lastName !== undefined) updateData.lastName = payload.lastName;
   if (payload.phone !== undefined) updateData.phone = payload.phone;
+
+  // Keep the combined `name` in sync whenever either name part changes.
+  if (payload.firstName !== undefined || payload.lastName !== undefined) {
+    const current = await User.findById(userId).select("firstName lastName");
+    const first = payload.firstName ?? current?.firstName ?? "";
+    const last = payload.lastName ?? current?.lastName ?? "";
+    const combined = `${first} ${last}`.trim();
+    if (combined) updateData.name = combined;
+  }
   if (payload.profileImage !== undefined)
     updateData.profileImage = payload.profileImage;
   if (payload.address !== undefined) updateData.address = payload.address;

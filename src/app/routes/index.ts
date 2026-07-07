@@ -11,6 +11,7 @@ import { ContentRoutes } from "../modules/content/content.routes";
 import { SupportRoutes } from "../modules/support/support.routes";
 import { PaymentRoutes } from "../modules/payment/payment.routes";
 import { AdminRoutes } from "../modules/admin/admin.routes";
+import { SettingsRoutes } from "../modules/settings/settings.routes";
 
 const router = Router();
 
@@ -62,6 +63,10 @@ const moduleRoutes = [
   {
     path: "/admin",
     route: AdminRoutes,
+  },
+  {
+    path: "/settings",
+    route: SettingsRoutes,
   },
 ];
 

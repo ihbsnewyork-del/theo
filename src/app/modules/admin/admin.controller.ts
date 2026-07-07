@@ -87,6 +87,36 @@ const setUserBlocked = catchAsync(async (req: Request, res: Response) => {
   });
 });
 
+const getAdmins = catchAsync(async (req: Request, res: Response) => {
+  const result = await AdminService.getAdmins(req.query as any);
+  sendResponse(res, {
+    statusCode: 200,
+    success: true,
+    message: "Admins retrieved successfully",
+    data: result,
+  });
+});
+
+const createAdmin = catchAsync(async (req: Request, res: Response) => {
+  const result = await AdminService.createAdmin(req.body);
+  sendResponse(res, {
+    statusCode: 201,
+    success: true,
+    message: "Admin created successfully",
+    data: result,
+  });
+});
+
+const deleteAdmin = catchAsync(async (req: Request, res: Response) => {
+  const result = await AdminService.deleteAdmin(req.params.id, req.user.userId);
+  sendResponse(res, {
+    statusCode: 200,
+    success: true,
+    message: "Admin deleted successfully",
+    data: result,
+  });
+});
+
 export const AdminController = {
   getDashboard,
   getHosts,
@@ -96,4 +126,7 @@ export const AdminController = {
   getSchedules,
   getTransactions,
   setUserBlocked,
+  getAdmins,
+  createAdmin,
+  deleteAdmin,
 };

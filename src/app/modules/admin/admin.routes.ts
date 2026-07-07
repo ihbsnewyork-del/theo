@@ -28,4 +28,12 @@ router.get("/transactions", auth("admin"), AdminController.getTransactions);
 // PATCH /api/v1/admin/users/:id/block  { block: true|false }
 router.patch("/users/:id/block", auth("admin"), AdminController.setUserBlocked);
 
+// ─── Admin accounts management ────────────────────────────────────────────────
+// GET /api/v1/admin/admins?search&page&limit
+router.get("/admins", auth("admin"), AdminController.getAdmins);
+// POST /api/v1/admin/admins  { name, email, phone?, password }
+router.post("/admins", auth("admin"), AdminController.createAdmin);
+// DELETE /api/v1/admin/admins/:id
+router.delete("/admins/:id", auth("admin"), AdminController.deleteAdmin);
+
 export const AdminRoutes = router;
