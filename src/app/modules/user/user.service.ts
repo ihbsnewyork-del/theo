@@ -1,4 +1,5 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
+import AppError from "../../error/appError";
 import { User } from "./user.model";
 
 const getAllUsers = async (query: Record<string, unknown>) => {
@@ -32,4 +33,23 @@ const getAllUsers = async (query: Record<string, unknown>) => {
   };
 };
 
-export const UserService = { getAllUsers };
+// ─── Push device token (OneSignal playerId) ───────────────────────────────────
+// Called by the host/cleaner MOBILE APP once the user grants push permission.
+// Web clients (admin/super admin dashboard, host website) never call this, so
+// they naturally never receive OneSignal pushes — only in-app + socket.
+const registerDeviceToken = async (userId: string, playerId: string) => {
+  if (!playerId) throw new AppError(400, "playerId is required");
+  await User.findByIdAndUpdate(userId, { playerId });
+  return { message: "Device registered for push notifications" };
+};
+
+const removeDeviceToken = async (userId: string) => {
+  await User.findByIdAndUpdate(userId, { $unset: { playerId: "" } });
+  return { message: "Device unregistered from push notifications" };
+};
+
+export const UserService = {
+  getAllUsers,
+  registerDeviceToken,
+  removeDeviceToken,
+};

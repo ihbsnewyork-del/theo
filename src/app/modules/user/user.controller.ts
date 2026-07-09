@@ -15,4 +15,34 @@ const getAllUsers = catchAsync(async (req: Request, res: Response) => {
   });
 });
 
-export const UserController = { getAllUsers };
+// ─── Push device token (mobile app) ───────────────────────────────────────────
+const registerDeviceToken = catchAsync(async (req: Request, res: Response) => {
+  const userId = (req as any).user.userId;
+  const result = await UserService.registerDeviceToken(
+    userId,
+    req.body.playerId,
+  );
+  sendResponse(res, {
+    statusCode: 200,
+    success: true,
+    message: result.message,
+    data: null,
+  });
+});
+
+const removeDeviceToken = catchAsync(async (req: Request, res: Response) => {
+  const userId = (req as any).user.userId;
+  const result = await UserService.removeDeviceToken(userId);
+  sendResponse(res, {
+    statusCode: 200,
+    success: true,
+    message: result.message,
+    data: null,
+  });
+});
+
+export const UserController = {
+  getAllUsers,
+  registerDeviceToken,
+  removeDeviceToken,
+};

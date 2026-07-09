@@ -6,6 +6,7 @@ import { CleaningSchedule } from "../schedule/schedule.model";
 import { Payment } from "../payment/payment.model";
 import { SupportTicket } from "../support/support.model";
 import AppError from "../../error/appError";
+import { NotificationService } from "../notification/notification.service";
 
 const toMoney = (cents: number) => Math.round((cents || 0)) / 100;
 
@@ -331,6 +332,15 @@ const createAdmin = async (payload: {
     role: "admin",
     isActive: true,
     isVerified: true,
+  });
+
+  // welcome the new admin in their dashboard notification center
+  await NotificationService.createNotification({
+    user: String(admin._id),
+    title: "Welcome to Gestlio Admin",
+    message: "Your admin account has been created. You now have dashboard access.",
+    type: "admin_account",
+    data: { adminId: String(admin._id) },
   });
 
   const obj = admin.toObject();

@@ -21,6 +21,10 @@ export const seedSuperAdmin = async () => {
         existing.role = "admin";
         changed = true;
       }
+      if (!existing.isSuperAdmin) {
+        existing.isSuperAdmin = true;
+        changed = true;
+      }
       if (!existing.isVerified) {
         existing.isVerified = true;
         changed = true;
@@ -41,6 +45,7 @@ export const seedSuperAdmin = async () => {
       email,
       password, // hashed by the user model pre-save hook
       role: "admin",
+      isSuperAdmin: true,
       isActive: true,
       isVerified: true,
     });

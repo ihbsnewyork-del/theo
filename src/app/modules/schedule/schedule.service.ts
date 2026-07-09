@@ -763,6 +763,14 @@ const reportDispute = async (
     data: { scheduleId: String(schedule._id) },
   });
 
+  // escalate to the admin/super-admin dashboard for arbitration
+  await NotificationService.notifyAdmins({
+    title: "Dispute needs review",
+    message: `A dispute was raised for ${accName}.`,
+    type: "dispute",
+    data: { scheduleId: String(schedule._id) },
+  });
+
   return schedule;
 };
 

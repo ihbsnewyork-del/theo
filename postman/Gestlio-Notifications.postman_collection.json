@@ -1,0 +1,144 @@
+{
+  "info": {
+    "name": "Gestlio – Notifications & Push",
+    "description": "In-app + push notification system for all four actors.\n\nDelivery model:\n- Every notification is stored in Mongo and pushed live over Socket.io to the recipient's personal room (events: `notification:new`, `notification:unreadCount`). This powers the real-time bell/badge on BOTH the admin/super-admin dashboard and the host website — no push permission required.\n- OneSignal push ONLY fires when the recipient has a registered `playerId`. Only the host/cleaner MOBILE APP registers one (via POST /user/device-token), so admins, super admins and web clients never receive a push — exactly as required.\n\nRoles:\n- host / cleaner → in-app (web) + push (app)\n- admin / super admin → in-app dashboard only (no push)\n\nSet collection variables:\n- baseUrl (e.g. http://localhost:6050/api/v1)\n- token (JWT of the logged-in user — any role)\n- notificationId (an id from 'Get my notifications')\n- playerId (OneSignal subscription id from the mobile SDK)",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    { "key": "baseUrl", "value": "http://localhost:6050/api/v1", "type": "string" },
+    { "key": "token", "value": "", "type": "string" },
+    { "key": "notificationId", "value": "", "type": "string" },
+    { "key": "playerId", "value": "", "type": "string" }
+  ],
+  "auth": {
+    "type": "bearer",
+    "bearer": [{ "key": "token", "value": "{{token}}", "type": "string" }]
+  },
+  "item": [
+    {
+      "name": "Notification Center",
+      "item": [
+        {
+          "name": "Get my notifications",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const json = pm.response.json();",
+                  "if (json?.data?.data?.length) {",
+                  "  pm.collectionVariables.set('notificationId', json.data.data[0]._id);",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/notification?page=1&limit=20&isRead=false&type=",
+              "host": ["{{baseUrl}}"],
+              "path": ["notification"],
+              "query": [
+                { "key": "page", "value": "1" },
+                { "key": "limit", "value": "20" },
+                { "key": "isRead", "value": "false", "description": "true | false — omit for all" },
+                { "key": "type", "value": "", "description": "filter by type e.g. dispute, new_user, message" }
+              ]
+            },
+            "description": "Paginated list of the current user's notifications, newest first. Returns `{ data, unreadCount, meta }`. Auto-saves the first id into {{notificationId}} for the requests below."
+          }
+        },
+        {
+          "name": "Get unread count",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/notification/unread-count",
+              "host": ["{{baseUrl}}"],
+              "path": ["notification", "unread-count"]
+            },
+            "description": "Lightweight badge count for the bell icon. Returns `{ unreadCount }`."
+          }
+        },
+        {
+          "name": "Mark one as read",
+          "request": {
+            "method": "PATCH",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/notification/{{notificationId}}/read",
+              "host": ["{{baseUrl}}"],
+              "path": ["notification", "{{notificationId}}", "read"]
+            },
+            "description": "Marks a single notification as read (scoped to the owner). Emits `notification:unreadCount` over the socket."
+          }
+        },
+        {
+          "name": "Mark all as read",
+          "request": {
+            "method": "PATCH",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/notification/read-all",
+              "host": ["{{baseUrl}}"],
+              "path": ["notification", "read-all"]
+            },
+            "description": "Clears the unread badge for the current user. Emits `notification:unreadCount` = 0."
+          }
+        },
+        {
+          "name": "Delete a notification",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/notification/{{notificationId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["notification", "{{notificationId}}"]
+            },
+            "description": "Removes a single notification from the current user's list."
+          }
+        }
+      ]
+    },
+    {
+      "name": "Push Device Token (mobile app)",
+      "item": [
+        {
+          "name": "Register device token",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"playerId\": \"{{playerId}}\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/user/device-token",
+              "host": ["{{baseUrl}}"],
+              "path": ["user", "device-token"]
+            },
+            "description": "Called by the host/cleaner MOBILE APP after the user grants push permission. Saves the OneSignal `playerId` on the user so future notifications also fire a push. Web clients never call this."
+          }
+        },
+        {
+          "name": "Remove device token (logout)",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/user/device-token",
+              "host": ["{{baseUrl}}"],
+              "path": ["user", "device-token"]
+            },
+            "description": "Called on logout / when push is revoked. Clears `playerId` so the device stops receiving pushes."
+          }
+        }
+      ]
+    }
+  ]
+}

@@ -232,6 +232,17 @@ const handleWebhook = async (rawBody: Buffer, signature: string) => {
           type: "general",
           data: { scheduleId: String(payment.schedule) },
         });
+
+        // admin/super-admin dashboard: a new payment landed in escrow
+        await NotificationService.notifyAdmins({
+          title: "New payment received",
+          message: `A host paid ${(payment.amount / 100).toFixed(2)} ${payment.currency.toUpperCase()} — funds held in escrow.`,
+          type: "payment_received",
+          data: {
+            scheduleId: String(payment.schedule),
+            paymentId: String(payment._id),
+          },
+        });
       }
       break;
     }
@@ -315,6 +326,17 @@ const releaseForSchedule = async (scheduleId: string) => {
     message: `Your payout of ${(payment.cleanerAmount / 100).toFixed(2)} ${payment.currency.toUpperCase()} is on its way.`,
     type: "general",
     data: { scheduleId: String(scheduleId) },
+  });
+
+  // admin/super-admin dashboard: funds released from escrow to the cleaner
+  await NotificationService.notifyAdmins({
+    title: "Payout released",
+    message: `${(payment.cleanerAmount / 100).toFixed(2)} ${payment.currency.toUpperCase()} was released to the cleaner.`,
+    type: "payment_received",
+    data: {
+      scheduleId: String(scheduleId),
+      paymentId: String(payment._id),
+    },
   });
 
   return { released: true, transferId: transfer.id };

@@ -7,6 +7,7 @@ import { generateOtp } from "../../utilities/generateOtp";
 import sendEmail from "../../utilities/sendEmail";
 import otpEmailTemplate from "../../mailTemplate/otpEmail";
 import config from "../../config";
+import { NotificationService } from "../notification/notification.service";
 import {
   ITokenPayload,
   ISignUp,
@@ -191,6 +192,15 @@ const completeProfile = async (
 const selectRole = async (userId: string, role: "host" | "cleaner") => {
   const user = await User.findByIdAndUpdate(userId, { role }, { new: true });
   if (!user) throw new AppError(404, "User not found");
+
+  // Let the admin/super-admin dashboard know a new host/cleaner joined.
+  await NotificationService.notifyAdmins({
+    title: "New user joined",
+    message: `${user.name || user.email} signed up as a ${role}.`,
+    type: "new_user",
+    data: { userId: String(user._id), role },
+  });
+
   return sanitize(user);
 };
 
