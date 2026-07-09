@@ -12,6 +12,7 @@ export interface IUser extends Document {
   email: string;
   password?: string;
   role?: TRole;
+  isSuperAdmin?: boolean; // true only for the seeded super admin (role stays "admin")
   authProvider: TAuthProvider;
   phone?: string;
   profileImage?: string;

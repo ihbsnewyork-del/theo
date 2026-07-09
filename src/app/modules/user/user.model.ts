@@ -12,6 +12,7 @@ const userSchema = new Schema<IUser>(
     password: { type: String, select: false },
 
     role: { type: String, enum: ["admin", "host", "cleaner"] },
+    isSuperAdmin: { type: Boolean, default: false }, // super admin — role stays "admin"
     authProvider: {
       type: String,
       enum: ["local", "google", "apple"],

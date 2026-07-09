@@ -3,6 +3,7 @@ import { SupportTicket } from "./support.model";
 import sendEmail from "../../utilities/sendEmail";
 import config from "../../config";
 import AppError from "../../error/appError";
+import { NotificationService } from "../notification/notification.service";
 
 // ─── Submit a support request (Help & Support form) ───────────────────────────
 const createTicket = async (
@@ -30,6 +31,14 @@ const createTicket = async (
       <p><strong>Message:</strong></p>
       <p>${payload.message}</p>
     `,
+  });
+
+  // in-app notification for the admin/super-admin dashboard
+  await NotificationService.notifyAdmins({
+    title: "New support request",
+    message: `${payload.email}: ${payload.subject}`,
+    type: "support_ticket",
+    data: { ticketId: String(ticket._id) },
   });
 
   return ticket;

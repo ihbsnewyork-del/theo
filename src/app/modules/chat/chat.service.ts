@@ -164,12 +164,30 @@ const createMessage = async (
 
   // persistent notification + push for the receiver (works while offline too)
   if (receiverId) {
+    // Show WHO sent it in the notification center, e.g. "New message from John".
+    const sender = message.sender as unknown as {
+      name?: string;
+      firstName?: string;
+      lastName?: string;
+      profileImage?: string;
+    };
+    const senderName =
+      sender?.name ||
+      [sender?.firstName, sender?.lastName].filter(Boolean).join(" ") ||
+      "Someone";
+
     await NotificationService.createNotification({
       user: receiverId,
-      title: "New message",
+      title: `New message from ${senderName}`,
       message: payload.content || "Sent you an attachment",
       type: "message",
-      data: { conversationId: payload.conversationId, messageId: String(message._id) },
+      data: {
+        conversationId: payload.conversationId,
+        messageId: String(message._id),
+        senderId,
+        senderName,
+        senderImage: sender?.profileImage,
+      },
     });
   }
 
